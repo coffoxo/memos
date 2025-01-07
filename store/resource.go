@@ -32,7 +32,8 @@ type Resource struct {
 	StorageType storepb.ResourceStorageType
 	Reference   string
 	Payload     *storepb.ResourcePayload
-
+	File        *multipart.FileHeader // Assuming this is how the file is passed
+        ImageData   []byte                // To store the compressed image data
 	// The related memo ID.
 	MemoID *int32
 }
@@ -66,11 +67,41 @@ type DeleteResource struct {
 	MemoID *int32
 }
 
+//func (s *Store) CreateResource(ctx context.Context, create *Resource) (*Resource, error) {
+//	if !util.UIDMatcher.MatchString(create.UID) {
+//		return nil, errors.New("invalid uid")
+//	}
+//	return s.driver.CreateResource(ctx, create)
+//}
+
 func (s *Store) CreateResource(ctx context.Context, create *Resource) (*Resource, error) {
-	if !util.UIDMatcher.MatchString(create.UID) {
-		return nil, errors.New("invalid uid")
-	}
-	return s.driver.CreateResource(ctx, create)
+    if !util.UIDMatcher.MatchString(create.UID) {
+        return nil, errors.New("invalid uid")
+    }
+
+    // Assuming create has a field for the uploaded file
+    if create.File != nil {
+        // Open the uploaded file
+        src, err := create.File.Open()
+        if err != nil {
+            return nil, err
+        }
+        defer src.Close()
+
+        // Create a bytes buffer to hold the compressed image
+        var compressedBuffer bytes.Buffer
+
+        // Compress the image
+        err = utils.CompressImage(src, &compressedBuffer, 800, 600, 75) // Adjust size/quality as needed
+        if err != nil {
+            return nil, err
+        }
+
+        // Update the resource with the compressed image data
+        create.ImageData = compressedBuffer.Bytes() // Assuming ImageData is a field in Resource
+    }
+
+    return s.driver.CreateResource(ctx, create)
 }
 
 func (s *Store) ListResources(ctx context.Context, find *FindResource) ([]*Resource, error) {
